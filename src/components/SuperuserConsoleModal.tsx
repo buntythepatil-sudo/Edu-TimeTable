@@ -32,6 +32,7 @@ import {
 } from '../services/schoolAdminService';
 import { School, SchoolAdmin } from '../types';
 import { SUPERUSER_EMAIL } from '../lib/firebase';
+import { useAuth } from '../context/AuthContext';
 
 interface SuperuserConsoleModalProps {
   isOpen: boolean;
@@ -46,11 +47,20 @@ export const SuperuserConsoleModal: React.FC<SuperuserConsoleModalProps> = ({
   isSuperuser,
   onToast,
 }) => {
+  const { hasPasswordProvider, changePassword } = useAuth();
   const [schools, setSchools] = useState<School[]>([]);
   const [admins, setAdmins] = useState<SchoolAdmin[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
+
+  // Superuser self-password setup / update
+  const [showSuperuserPassForm, setShowSuperuserPassForm] = useState(false);
+  const [suOldPass, setSuOldPass] = useState('');
+  const [suNewPass, setSuNewPass] = useState('');
+  const [suConfirmPass, setSuConfirmPass] = useState('');
+  const [showSuPass, setShowSuPass] = useState(false);
+  const [isSavingSuPass, setIsSavingSuPass] = useState(false);
 
   // Add School + 1 Admin form
   const [showAddForm, setShowAddForm] = useState(true);
@@ -174,6 +184,49 @@ export const SuperuserConsoleModal: React.FC<SuperuserConsoleModalProps> = ({
       pass += chars.charAt(Math.floor(Math.random() * chars.length));
     }
     return pass;
+  };
+
+  const handleSaveSuperuserPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMsg(null);
+    setStatusMsg(null);
+
+    if (suNewPass.length < 6) {
+      setErrorMsg('Superuser password must be at least 6 characters.');
+      return;
+    }
+    if (suNewPass !== suConfirmPass) {
+      setErrorMsg('Superuser passwords do not match.');
+      return;
+    }
+
+    setIsSavingSuPass(true);
+    try {
+      const wasCreate = !hasPasswordProvider;
+      const res = await changePassword(suOldPass, suNewPass);
+      if (res.success) {
+        setIssuedCredentials({
+          schoolName: 'System Superuser',
+          email: SUPERUSER_EMAIL,
+          password: suNewPass,
+          status: 'created',
+        });
+        setCopiedCreds(false);
+        notify(
+          wasCreate
+            ? `✓ Superuser password created for ${SUPERUSER_EMAIL}`
+            : `✓ Superuser password updated for ${SUPERUSER_EMAIL}`
+        );
+        setSuOldPass('');
+        setSuNewPass('');
+        setSuConfirmPass('');
+        setShowSuperuserPassForm(false);
+      } else {
+        setErrorMsg(res.error || 'Could not save Superuser password.');
+      }
+    } finally {
+      setIsSavingSuPass(false);
+    }
   };
 
   const handleCopyCredentials = async () => {
@@ -334,102 +387,234 @@ export const SuperuserConsoleModal: React.FC<SuperuserConsoleModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 bg-slate-900/65 backdrop-blur-xs z-[900] flex items-center justify-center p-3 sm:p-4 overflow-y-auto"
+      className="fixed inset-0 bg-slate-900/65 backdrop-blur-xs z-[900] flex items-center justify-center p-1.5 sm:p-4 overflow-hidden"
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-2xl w-full max-w-5xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[92vh] animate-in fade-in zoom-in-95 duration-200"
+        className="bg-white rounded-xl sm:rounded-2xl w-full max-w-5xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[95dvh] sm:max-h-[92vh] animate-in fade-in zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="bg-gradient-to-r from-slate-950 via-indigo-950 to-slate-900 text-white p-5 sm:p-6 shrink-0 border-b border-slate-800 flex items-center justify-between gap-4">
-          <div>
-            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-500/20 border border-amber-400/40 text-[0.68rem] font-black text-amber-300 uppercase tracking-wider mb-1.5">
-              <Crown className="w-3 h-3" /> Superuser Governance Console
+        <div className="bg-gradient-to-r from-slate-950 via-indigo-950 to-slate-900 text-white px-3.5 py-3 sm:p-5 shrink-0 border-b border-slate-800 flex items-start sm:items-center justify-between gap-2.5 sm:gap-4">
+          <div className="min-w-0">
+            <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-400/40 text-[0.58rem] sm:text-[0.68rem] font-black text-amber-300 uppercase tracking-wider mb-1 whitespace-nowrap">
+              <Crown className="w-2.5 h-2.5 sm:w-3 sm:h-3 shrink-0" />
+              <span>Superuser Console</span>
             </div>
-            <h2 className="text-xl font-black tracking-tight flex items-center gap-2">
-              <span>Schools &amp; Single-Admin Access Control</span>
+            <h2 className="text-sm sm:text-xl font-black tracking-tight leading-snug">
+              Schools &amp; Single-Admin Access Control
             </h2>
-            <p className="text-xs text-slate-300 mt-0.5">
-              Signed in as <strong className="text-white">{SUPERUSER_EMAIL}</strong> — 1 admin permitted per school; block or restore any admin in real time.
+            <p className="text-[0.64rem] sm:text-xs text-slate-300 mt-0.5 leading-snug">
+              Signed in as <strong className="text-white break-all sm:break-normal">{SUPERUSER_EMAIL}</strong> — 1 admin per school; block or restore anytime.
             </p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="text-slate-400 hover:text-white bg-slate-800/80 hover:bg-slate-700 w-9 h-9 rounded-full flex items-center justify-center transition-colors cursor-pointer shrink-0"
+            className="text-slate-400 hover:text-white bg-slate-800/80 hover:bg-slate-700 w-7 h-7 sm:w-9 sm:h-9 rounded-full flex items-center justify-center transition-colors cursor-pointer shrink-0"
             title="Close Superuser Console"
           >
-            <X className="w-4 h-4" />
+            <X className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           </button>
         </div>
 
         {/* Body */}
-        <div className="p-4 sm:p-6 overflow-y-auto flex-1 bg-slate-50 flex flex-col gap-5 text-slate-900">
+        <div className="p-2.5 sm:p-5 overflow-y-auto flex-1 min-h-0 bg-slate-50 flex flex-col gap-2.5 sm:gap-4 text-slate-900">
           {/* KPI Summary Strip */}
-          <div className="grid grid-cols-3 gap-3">
-            <div className="bg-white rounded-xl border border-slate-200 p-3.5 shadow-2xs flex items-center justify-between">
-              <div>
-                <div className="text-[0.68rem] font-bold uppercase tracking-wider text-slate-500">
-                  Registered Schools
+          <div className="grid grid-cols-3 gap-1.5 sm:gap-3">
+            <div className="bg-white rounded-lg sm:rounded-xl border border-slate-200 p-2 sm:p-3.5 shadow-2xs flex items-center justify-between gap-1 min-w-0">
+              <div className="min-w-0 flex-1">
+                <div className="text-[0.56rem] sm:text-[0.68rem] font-bold uppercase tracking-tight sm:tracking-wider text-slate-500 truncate">
+                  <span className="sm:hidden">Schools</span>
+                  <span className="hidden sm:inline">Registered Schools</span>
                 </div>
-                <div className="text-2xl font-black text-slate-900 mt-0.5">{stats.total}</div>
+                <div className="text-base sm:text-2xl font-black text-slate-900 leading-none mt-0.5">{stats.total}</div>
               </div>
-              <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
-                <Building2 className="w-5 h-5" />
+              <div className="w-6 h-6 sm:w-10 sm:h-10 rounded-md sm:rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+                <Building2 className="w-3.5 h-3.5 sm:w-5 sm:h-5" />
               </div>
             </div>
 
-            <div className="bg-white rounded-xl border border-emerald-200 p-3.5 shadow-2xs flex items-center justify-between">
-              <div>
-                <div className="text-[0.68rem] font-bold uppercase tracking-wider text-emerald-700">
-                  Active Admins
+            <div className="bg-white rounded-lg sm:rounded-xl border border-emerald-200 p-2 sm:p-3.5 shadow-2xs flex items-center justify-between gap-1 min-w-0">
+              <div className="min-w-0 flex-1">
+                <div className="text-[0.56rem] sm:text-[0.68rem] font-bold uppercase tracking-tight sm:tracking-wider text-emerald-700 truncate">
+                  <span className="sm:hidden">Active</span>
+                  <span className="hidden sm:inline">Active Admins</span>
                 </div>
-                <div className="text-2xl font-black text-emerald-700 mt-0.5">{stats.active}</div>
+                <div className="text-base sm:text-2xl font-black text-emerald-700 leading-none mt-0.5">{stats.active}</div>
               </div>
-              <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
-                <ShieldCheck className="w-5 h-5" />
+              <div className="w-6 h-6 sm:w-10 sm:h-10 rounded-md sm:rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                <ShieldCheck className="w-3.5 h-3.5 sm:w-5 sm:h-5" />
               </div>
             </div>
 
-            <div className="bg-white rounded-xl border border-rose-200 p-3.5 shadow-2xs flex items-center justify-between">
-              <div>
-                <div className="text-[0.68rem] font-bold uppercase tracking-wider text-rose-700">
-                  Blocked Admins
+            <div className="bg-white rounded-lg sm:rounded-xl border border-rose-200 p-2 sm:p-3.5 shadow-2xs flex items-center justify-between gap-1 min-w-0">
+              <div className="min-w-0 flex-1">
+                <div className="text-[0.56rem] sm:text-[0.68rem] font-bold uppercase tracking-tight sm:tracking-wider text-rose-700 truncate">
+                  <span className="sm:hidden">Blocked</span>
+                  <span className="hidden sm:inline">Blocked Admins</span>
                 </div>
-                <div className="text-2xl font-black text-rose-700 mt-0.5">{stats.blocked}</div>
+                <div className="text-base sm:text-2xl font-black text-rose-700 leading-none mt-0.5">{stats.blocked}</div>
               </div>
-              <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center">
-                <ShieldOff className="w-5 h-5" />
+              <div className="w-6 h-6 sm:w-10 sm:h-10 rounded-md sm:rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
+                <ShieldOff className="w-3.5 h-3.5 sm:w-5 sm:h-5" />
               </div>
             </div>
           </div>
 
+          {/* Superuser Login ID Password Card */}
+          <div className="bg-white rounded-xl sm:rounded-2xl border border-amber-200 shadow-2xs overflow-hidden">
+            <div className="px-3 py-2 sm:px-4 sm:py-3 bg-amber-50/70 border-b border-amber-200/70 flex items-center justify-between flex-wrap gap-2">
+              <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+                <KeyRound className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-700 shrink-0" />
+                <div className="text-[0.66rem] sm:text-xs leading-snug min-w-0">
+                  <span className="font-black text-slate-900">Superuser ID: </span>
+                  <span className="font-mono text-indigo-700 font-semibold break-all sm:break-normal">{SUPERUSER_EMAIL}</span>
+                  <span
+                    className={`ml-1.5 inline-block text-[0.56rem] sm:text-[0.65rem] font-bold px-1.5 py-0.5 rounded-full border ${
+                      hasPasswordProvider
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                        : 'bg-amber-100 text-amber-900 border-amber-300'
+                    }`}
+                  >
+                    {hasPasswordProvider ? 'Password Active' : 'No Password Yet'}
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowSuperuserPassForm(!showSuperuserPassForm)}
+                className="h-7 sm:h-8 px-2.5 sm:px-3 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-[0.65rem] sm:text-xs font-bold cursor-pointer transition-colors whitespace-nowrap"
+              >
+                {showSuperuserPassForm
+                  ? 'Hide'
+                  : hasPasswordProvider
+                  ? 'Update Password'
+                  : 'Create Password'}
+              </button>
+            </div>
+
+            {showSuperuserPassForm && (
+              <form onSubmit={handleSaveSuperuserPassword} className="p-3 sm:p-4 flex flex-col gap-2.5 sm:gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3 items-end">
+                  {hasPasswordProvider && (
+                    <div>
+                      <label className="block text-[0.6rem] sm:text-[0.68rem] font-bold uppercase tracking-wider text-slate-500 mb-0.5 sm:mb-1">
+                        Current Password *
+                      </label>
+                      <input
+                        type="password"
+                        required
+                        value={suOldPass}
+                        onChange={(e) => setSuOldPass(e.target.value)}
+                        placeholder="••••••••"
+                        className="w-full h-8 sm:h-9 px-2.5 sm:px-3 rounded-lg border border-slate-200 text-[0.72rem] sm:text-xs font-semibold outline-none focus:border-indigo-600 bg-white"
+                      />
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="block text-[0.6rem] sm:text-[0.68rem] font-bold uppercase tracking-wider text-slate-500 mb-0.5 sm:mb-1">
+                      {hasPasswordProvider ? 'New Password *' : 'Create Superuser Password *'}
+                    </label>
+                    <div className="flex items-center gap-1">
+                      <div className="relative flex-1">
+                        <input
+                          type={showSuPass ? 'text' : 'password'}
+                          required
+                          value={suNewPass}
+                          onChange={(e) => setSuNewPass(e.target.value)}
+                          placeholder="Min 6 characters"
+                          className="w-full h-8 sm:h-9 pl-2.5 pr-7 rounded-lg border border-slate-200 text-[0.72rem] sm:text-xs font-semibold outline-none focus:border-indigo-600 bg-white"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowSuPass(!showSuPass)}
+                          className="absolute right-2 top-2 sm:top-2.5 text-slate-400 hover:text-slate-700 cursor-pointer"
+                        >
+                          {showSuPass ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                        </button>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const gen = generateStrongPassword();
+                          setSuNewPass(gen);
+                          setSuConfirmPass(gen);
+                          setShowSuPass(true);
+                        }}
+                        className="h-8 sm:h-9 px-2 rounded-lg bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 text-[0.64rem] sm:text-[0.68rem] font-bold flex items-center gap-1 cursor-pointer shrink-0"
+                        title="Generate strong password"
+                      >
+                        <Wand2 className="w-3 h-3" />
+                        <span>Gen</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[0.6rem] sm:text-[0.68rem] font-bold uppercase tracking-wider text-slate-500 mb-0.5 sm:mb-1">
+                      Confirm Password *
+                    </label>
+                    <input
+                      type={showSuPass ? 'text' : 'password'}
+                      required
+                      value={suConfirmPass}
+                      onChange={(e) => setSuConfirmPass(e.target.value)}
+                      placeholder="Repeat password"
+                      className="w-full h-8 sm:h-9 px-2.5 sm:px-3 rounded-lg border border-slate-200 text-[0.72rem] sm:text-xs font-semibold outline-none focus:border-indigo-600 bg-white"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <span className="text-[0.62rem] sm:text-[0.7rem] text-slate-500">
+                    Sign in on the login screen with <strong>{SUPERUSER_EMAIL}</strong> + password or Google.
+                  </span>
+                  <button
+                    type="submit"
+                    disabled={isSavingSuPass}
+                    className="h-8 sm:h-9 px-3 sm:px-4 rounded-lg sm:rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 text-[0.68rem] sm:text-xs font-black flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 w-full sm:w-auto"
+                  >
+                    <KeyRound className="w-3.5 h-3.5" />
+                    <span>
+                      {isSavingSuPass
+                        ? 'Saving...'
+                        : hasPasswordProvider
+                        ? 'Update Superuser Password'
+                        : 'Save Superuser Password'}
+                    </span>
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+
           {/* Inline Banners */}
           {errorMsg && (
-            <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-800 text-xs font-semibold flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+            <div className="p-2.5 sm:p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-800 text-[0.68rem] sm:text-xs font-semibold flex items-center gap-2">
+              <AlertCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-rose-600 shrink-0" />
               <span>{errorMsg}</span>
             </div>
           )}
 
           {statusMsg && (
-            <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 text-xs font-semibold flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <div className="p-2.5 sm:p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 text-[0.68rem] sm:text-xs font-semibold flex items-center gap-2">
+              <CheckCircle2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-600 shrink-0" />
               <span>{statusMsg}</span>
             </div>
           )}
 
           {issuedCredentials && (
-            <div className="p-4 bg-indigo-50 border border-indigo-200 rounded-2xl text-indigo-950 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
-              <div className="flex items-start gap-2.5 min-w-0">
-                <KeyRound className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
-                <div className="text-xs min-w-0">
+            <div className="p-3 sm:p-4 bg-indigo-50 border border-indigo-200 rounded-xl sm:rounded-2xl text-indigo-950 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3 shadow-2xs">
+              <div className="flex items-start gap-2 min-w-0">
+                <KeyRound className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-indigo-600 shrink-0 mt-0.5" />
+                <div className="text-[0.68rem] sm:text-xs min-w-0">
                   <div className="font-black text-indigo-950">
-                    Issued Admin Credentials — {issuedCredentials.schoolName}
+                    Issued Credentials — {issuedCredentials.schoolName}
                   </div>
-                  <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-[0.72rem]">
-                    <span>
+                  <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[0.65rem] sm:text-[0.72rem]">
+                    <span className="break-all">
                       Login ID: <strong className="font-mono text-indigo-800">{issuedCredentials.email}</strong>
                     </span>
                     {issuedCredentials.status === 'created' && issuedCredentials.password ? (
@@ -438,7 +623,7 @@ export const SuperuserConsoleModal: React.FC<SuperuserConsoleModalProps> = ({
                       </span>
                     ) : issuedCredentials.status === 'already-exists' ? (
                       <span className="text-amber-800 font-semibold">
-                        Account already exists in Firebase Auth — admin keeps their existing password or Google Sign-In.
+                        Account exists in Firebase Auth — existing password or Google Sign-In applies.
                       </span>
                     ) : (
                       <span className="text-slate-600 font-semibold">
@@ -447,8 +632,8 @@ export const SuperuserConsoleModal: React.FC<SuperuserConsoleModalProps> = ({
                     )}
                   </div>
                   {issuedCredentials.status === 'created' && (
-                    <div className="text-[0.66rem] text-indigo-700 mt-1">
-                      Save or copy these credentials now — passwords are never stored in the database.
+                    <div className="text-[0.6rem] sm:text-[0.66rem] text-indigo-700 mt-1">
+                      Copy these credentials now — passwords are never stored in the database.
                     </div>
                   )}
                 </div>
@@ -457,15 +642,15 @@ export const SuperuserConsoleModal: React.FC<SuperuserConsoleModalProps> = ({
                 <button
                   type="button"
                   onClick={handleCopyCredentials}
-                  className="h-8 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                  className="h-7 sm:h-8 px-2.5 sm:px-3 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-[0.68rem] sm:text-xs font-bold flex items-center gap-1 cursor-pointer"
                 >
-                  {copiedCreds ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                  <span>{copiedCreds ? 'Copied' : 'Copy Credentials'}</span>
+                  {copiedCreds ? <Check className="w-3 h-3 sm:w-3.5 sm:h-3.5" /> : <Copy className="w-3 h-3 sm:w-3.5 sm:h-3.5" />}
+                  <span>{copiedCreds ? 'Copied' : 'Copy'}</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setIssuedCredentials(null)}
-                  className="h-8 px-2.5 rounded-lg bg-white border border-indigo-200 text-indigo-700 hover:bg-indigo-100 text-xs font-bold cursor-pointer"
+                  className="h-7 sm:h-8 px-2.5 rounded-lg bg-white border border-indigo-200 text-indigo-700 hover:bg-indigo-100 text-[0.68rem] sm:text-xs font-bold cursor-pointer"
                 >
                   Dismiss
                 </button>
@@ -474,28 +659,28 @@ export const SuperuserConsoleModal: React.FC<SuperuserConsoleModalProps> = ({
           )}
 
           {/* Add School + Designated Admin Card */}
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
+          <div className="bg-white rounded-xl sm:rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
             <button
               type="button"
               onClick={() => setShowAddForm(!showAddForm)}
-              className="w-full px-4 py-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between text-left cursor-pointer hover:bg-slate-100/70 transition-colors"
+              className="w-full px-3 py-2 sm:px-4 sm:py-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between gap-2 text-left cursor-pointer hover:bg-slate-100/70 transition-colors"
             >
-              <div className="flex items-center gap-2">
-                <UserPlus className="w-4 h-4 text-indigo-600" />
-                <span className="text-xs font-black uppercase tracking-wider text-slate-800">
+              <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+                <UserPlus className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-indigo-600 shrink-0" />
+                <span className="text-[0.65rem] sm:text-xs font-black uppercase tracking-wide sm:tracking-wider text-slate-800 truncate">
                   Add New School &amp; Assign 1 Admin
                 </span>
               </div>
-              <span className="text-[0.68rem] font-bold text-indigo-600">
-                {showAddForm ? 'Hide Form' : 'Expand Form'}
+              <span className="text-[0.62rem] sm:text-[0.68rem] font-bold text-indigo-600 whitespace-nowrap shrink-0">
+                {showAddForm ? 'Hide' : 'Expand'}
               </span>
             </button>
 
             {showAddForm && (
-              <form onSubmit={handleAddSchoolAndAdmin} className="p-4 flex flex-col gap-3">
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              <form onSubmit={handleAddSchoolAndAdmin} className="p-3 sm:p-4 flex flex-col gap-2 sm:gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
                   <div className="lg:col-span-2">
-                    <label className="block text-[0.68rem] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                    <label className="block text-[0.6rem] sm:text-[0.68rem] font-bold uppercase tracking-wider text-slate-500 mb-0.5 sm:mb-1">
                       School Name *
                     </label>
                     <input
@@ -504,38 +689,40 @@ export const SuperuserConsoleModal: React.FC<SuperuserConsoleModalProps> = ({
                       value={schoolName}
                       onChange={(e) => setSchoolName(e.target.value)}
                       placeholder="e.g. Oakridge Public School"
-                      className="w-full h-9 px-3 rounded-lg border border-slate-200 text-xs font-semibold outline-none focus:border-indigo-600 bg-white"
+                      className="w-full h-8 sm:h-9 px-2.5 sm:px-3 rounded-lg border border-slate-200 text-[0.72rem] sm:text-xs font-semibold outline-none focus:border-indigo-600 bg-white"
                     />
                   </div>
-                  <div>
-                    <label className="block text-[0.68rem] font-bold uppercase tracking-wider text-slate-500 mb-1">
-                      School Code
-                    </label>
-                    <input
-                      type="text"
-                      value={schoolCode}
-                      onChange={(e) => setSchoolCode(e.target.value)}
-                      placeholder="e.g. OPS-101"
-                      className="w-full h-9 px-3 rounded-lg border border-slate-200 text-xs font-semibold outline-none focus:border-indigo-600 bg-white"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[0.68rem] font-bold uppercase tracking-wider text-slate-500 mb-1">
-                      City / Campus
-                    </label>
-                    <input
-                      type="text"
-                      value={city}
-                      onChange={(e) => setCity(e.target.value)}
-                      placeholder="e.g. Pune"
-                      className="w-full h-9 px-3 rounded-lg border border-slate-200 text-xs font-semibold outline-none focus:border-indigo-600 bg-white"
-                    />
+                  <div className="grid grid-cols-2 sm:contents gap-2">
+                    <div>
+                      <label className="block text-[0.6rem] sm:text-[0.68rem] font-bold uppercase tracking-wider text-slate-500 mb-0.5 sm:mb-1">
+                        School Code
+                      </label>
+                      <input
+                        type="text"
+                        value={schoolCode}
+                        onChange={(e) => setSchoolCode(e.target.value)}
+                        placeholder="e.g. OPS-101"
+                        className="w-full h-8 sm:h-9 px-2.5 sm:px-3 rounded-lg border border-slate-200 text-[0.72rem] sm:text-xs font-semibold outline-none focus:border-indigo-600 bg-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[0.6rem] sm:text-[0.68rem] font-bold uppercase tracking-wider text-slate-500 mb-0.5 sm:mb-1">
+                        City / Campus
+                      </label>
+                      <input
+                        type="text"
+                        value={city}
+                        onChange={(e) => setCity(e.target.value)}
+                        placeholder="e.g. Pune"
+                        className="w-full h-8 sm:h-9 px-2.5 sm:px-3 rounded-lg border border-slate-200 text-[0.72rem] sm:text-xs font-semibold outline-none focus:border-indigo-600 bg-white"
+                      />
+                    </div>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2 sm:gap-3">
                   <div>
-                    <label className="block text-[0.68rem] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                    <label className="block text-[0.6rem] sm:text-[0.68rem] font-bold uppercase tracking-wider text-slate-500 mb-0.5 sm:mb-1">
                       Admin Full Name *
                     </label>
                     <input
@@ -544,11 +731,11 @@ export const SuperuserConsoleModal: React.FC<SuperuserConsoleModalProps> = ({
                       value={adminName}
                       onChange={(e) => setAdminName(e.target.value)}
                       placeholder="e.g. Rajesh Sharma"
-                      className="w-full h-9 px-3 rounded-lg border border-slate-200 text-xs font-semibold outline-none focus:border-indigo-600 bg-white"
+                      className="w-full h-8 sm:h-9 px-2.5 sm:px-3 rounded-lg border border-slate-200 text-[0.72rem] sm:text-xs font-semibold outline-none focus:border-indigo-600 bg-white"
                     />
                   </div>
                   <div>
-                    <label className="block text-[0.68rem] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                    <label className="block text-[0.6rem] sm:text-[0.68rem] font-bold uppercase tracking-wider text-slate-500 mb-0.5 sm:mb-1">
                       Admin Login ID (Email) *
                     </label>
                     <input
@@ -557,11 +744,11 @@ export const SuperuserConsoleModal: React.FC<SuperuserConsoleModalProps> = ({
                       value={adminEmail}
                       onChange={(e) => setAdminEmail(e.target.value)}
                       placeholder="admin@school.edu"
-                      className="w-full h-9 px-3 rounded-lg border border-slate-200 text-xs font-semibold outline-none focus:border-indigo-600 bg-white"
+                      className="w-full h-8 sm:h-9 px-2.5 sm:px-3 rounded-lg border border-slate-200 text-[0.72rem] sm:text-xs font-semibold outline-none focus:border-indigo-600 bg-white"
                     />
                   </div>
                   <div>
-                    <label className="block text-[0.68rem] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                    <label className="block text-[0.6rem] sm:text-[0.68rem] font-bold uppercase tracking-wider text-slate-500 mb-0.5 sm:mb-1">
                       Initial Password (Optional)
                     </label>
                     <div className="flex items-center gap-1">
@@ -571,12 +758,12 @@ export const SuperuserConsoleModal: React.FC<SuperuserConsoleModalProps> = ({
                           value={adminPassword}
                           onChange={(e) => setAdminPassword(e.target.value)}
                           placeholder="Min 6 chars or Google"
-                          className="w-full h-9 pl-2.5 pr-8 rounded-lg border border-slate-200 text-xs font-semibold outline-none focus:border-indigo-600 bg-white"
+                          className="w-full h-8 sm:h-9 pl-2.5 pr-7 rounded-lg border border-slate-200 text-[0.72rem] sm:text-xs font-semibold outline-none focus:border-indigo-600 bg-white"
                         />
                         <button
                           type="button"
                           onClick={() => setShowAddPassword(!showAddPassword)}
-                          className="absolute right-2 top-2.5 text-slate-400 hover:text-slate-700 cursor-pointer"
+                          className="absolute right-2 top-2 sm:top-2.5 text-slate-400 hover:text-slate-700 cursor-pointer"
                           title={showAddPassword ? 'Hide password' : 'Show password'}
                         >
                           {showAddPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
@@ -588,7 +775,7 @@ export const SuperuserConsoleModal: React.FC<SuperuserConsoleModalProps> = ({
                           setAdminPassword(generateStrongPassword());
                           setShowAddPassword(true);
                         }}
-                        className="h-9 px-2 rounded-lg bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 text-[0.68rem] font-bold flex items-center gap-1 cursor-pointer shrink-0"
+                        className="h-8 sm:h-9 px-2 rounded-lg bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 text-[0.64rem] sm:text-[0.68rem] font-bold flex items-center gap-1 cursor-pointer shrink-0"
                         title="Generate random password"
                       >
                         <Wand2 className="w-3 h-3" />
@@ -596,41 +783,43 @@ export const SuperuserConsoleModal: React.FC<SuperuserConsoleModalProps> = ({
                       </button>
                     </div>
                   </div>
-                  <div>
-                    <label className="block text-[0.68rem] font-bold uppercase tracking-wider text-slate-500 mb-1">
-                      Admin Role
-                    </label>
-                    <select
-                      value={adminRole}
-                      onChange={(e) => setAdminRole(e.target.value as 'Principal' | 'Administrator')}
-                      className="w-full h-9 px-2.5 rounded-lg border border-slate-200 text-xs font-semibold outline-none focus:border-indigo-600 bg-white"
-                    >
-                      <option value="Principal">Principal</option>
-                      <option value="Administrator">Administrator</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-[0.68rem] font-bold uppercase tracking-wider text-slate-500 mb-1">
-                      Academic Year
-                    </label>
-                    <input
-                      type="text"
-                      value={academicYear}
-                      onChange={(e) => setAcademicYear(e.target.value)}
-                      placeholder="2026–2027"
-                      className="w-full h-9 px-3 rounded-lg border border-slate-200 text-xs font-semibold outline-none focus:border-indigo-600 bg-white"
-                    />
+                  <div className="grid grid-cols-2 sm:contents gap-2">
+                    <div>
+                      <label className="block text-[0.6rem] sm:text-[0.68rem] font-bold uppercase tracking-wider text-slate-500 mb-0.5 sm:mb-1">
+                        Admin Role
+                      </label>
+                      <select
+                        value={adminRole}
+                        onChange={(e) => setAdminRole(e.target.value as 'Principal' | 'Administrator')}
+                        className="w-full h-8 sm:h-9 px-2 rounded-lg border border-slate-200 text-[0.72rem] sm:text-xs font-semibold outline-none focus:border-indigo-600 bg-white"
+                      >
+                        <option value="Principal">Principal</option>
+                        <option value="Administrator">Administrator</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[0.6rem] sm:text-[0.68rem] font-bold uppercase tracking-wider text-slate-500 mb-0.5 sm:mb-1">
+                        Academic Year
+                      </label>
+                      <input
+                        type="text"
+                        value={academicYear}
+                        onChange={(e) => setAcademicYear(e.target.value)}
+                        placeholder="2026–2027"
+                        className="w-full h-8 sm:h-9 px-2.5 sm:px-3 rounded-lg border border-slate-200 text-[0.72rem] sm:text-xs font-semibold outline-none focus:border-indigo-600 bg-white"
+                      />
+                    </div>
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between pt-1 flex-wrap gap-2">
-                  <span className="text-[0.7rem] text-slate-500">
-                    Each school has strictly <strong>1 admin</strong>. Provide a password for Login ID sign-in, or leave blank for Google Sign-In only.
+                <div className="flex items-center justify-between pt-0.5 flex-wrap gap-2">
+                  <span className="text-[0.62rem] sm:text-[0.7rem] text-slate-500 leading-snug">
+                    Strictly <strong>1 admin</strong> per school. Leave password blank for Google Sign-In only.
                   </span>
                   <button
                     type="submit"
                     disabled={isSubmitting}
-                    className="h-9 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                    className="h-8 sm:h-9 px-3.5 sm:px-4 rounded-lg sm:rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-[0.7rem] sm:text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 w-full sm:w-auto"
                   >
                     {isSubmitting ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <UserPlus className="w-3.5 h-3.5" />}
                     <span>{isSubmitting ? 'Registering...' : 'Add School & Admin'}</span>
@@ -641,26 +830,26 @@ export const SuperuserConsoleModal: React.FC<SuperuserConsoleModalProps> = ({
           </div>
 
           {/* Registered Schools & Admins List */}
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
-            <div className="p-3.5 border-b border-slate-200 flex items-center justify-between flex-wrap gap-3 bg-slate-50">
-              <div className="relative flex-1 min-w-[200px]">
-                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
+          <div className="bg-white rounded-xl sm:rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
+            <div className="p-2.5 sm:p-3.5 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-3 bg-slate-50">
+              <div className="relative flex-1 min-w-0">
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2 sm:top-2.5" />
                 <input
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search school name, code, city, or admin email..."
-                  className="w-full h-8 pl-8 pr-3 rounded-lg border border-slate-200 text-xs outline-none focus:border-indigo-600 bg-white"
+                  placeholder="Search school, city, or admin..."
+                  className="w-full h-7.5 sm:h-8 pl-8 pr-2.5 rounded-lg border border-slate-200 text-[0.7rem] sm:text-xs outline-none focus:border-indigo-600 bg-white"
                 />
               </div>
 
-              <div className="flex items-center gap-1 bg-white p-1 rounded-lg border border-slate-200">
+              <div className="flex items-center gap-1 bg-white p-0.5 sm:p-1 rounded-lg border border-slate-200 self-start sm:self-auto">
                 {(['all', 'active', 'blocked'] as const).map((tab) => (
                   <button
                     key={tab}
                     type="button"
                     onClick={() => setStatusFilter(tab)}
-                    className={`px-2.5 py-1 rounded-md text-[0.7rem] font-bold capitalize cursor-pointer transition-colors ${
+                    className={`px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-md text-[0.64rem] sm:text-[0.7rem] font-bold capitalize cursor-pointer transition-colors ${
                       statusFilter === tab
                         ? 'bg-indigo-600 text-white'
                         : 'text-slate-600 hover:bg-slate-100'
@@ -673,17 +862,17 @@ export const SuperuserConsoleModal: React.FC<SuperuserConsoleModalProps> = ({
             </div>
 
             {loading ? (
-              <div className="p-8 text-center text-xs text-slate-500 flex items-center justify-center gap-2">
-                <RefreshCw className="w-4 h-4 animate-spin text-indigo-600" />
+              <div className="p-6 sm:p-8 text-center text-[0.7rem] sm:text-xs text-slate-500 flex items-center justify-center gap-2">
+                <RefreshCw className="w-3.5 h-3.5 sm:w-4 sm:h-4 animate-spin text-indigo-600" />
                 <span>Loading schools &amp; admin directory...</span>
               </div>
             ) : filteredSchools.length === 0 ? (
-              <div className="p-10 text-center">
-                <SchoolIcon className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-                <div className="text-sm font-bold text-slate-700">No matching schools found</div>
-                <p className="text-xs text-slate-500 mt-1">
+              <div className="p-6 sm:p-10 text-center">
+                <SchoolIcon className="w-6 h-6 sm:w-8 sm:h-8 text-slate-300 mx-auto mb-1.5 sm:mb-2" />
+                <div className="text-xs sm:text-sm font-bold text-slate-700">No matching schools found</div>
+                <p className="text-[0.68rem] sm:text-xs text-slate-500 mt-1">
                   {schools.length === 0
-                    ? 'Add your first school and assign its designated administrator above.'
+                    ? 'Add your first school and assign its administrator above.'
                     : 'Adjust your search or status filter to view schools.'}
                 </p>
               </div>
@@ -697,21 +886,21 @@ export const SuperuserConsoleModal: React.FC<SuperuserConsoleModalProps> = ({
                   const isBusy = busyRowId === school.id;
 
                   return (
-                    <div key={school.id} className="p-4 flex flex-col gap-3 hover:bg-slate-50/70 transition-colors">
-                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                    <div key={school.id} className="p-3 sm:p-4 flex flex-col gap-2 sm:gap-3 hover:bg-slate-50/70 transition-colors">
+                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 sm:gap-3">
                         <div className="min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-black text-sm text-slate-900">{school.name}</span>
+                          <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                            <span className="font-black text-xs sm:text-sm text-slate-900">{school.name}</span>
                             {school.code && (
-                              <span className="text-[0.65rem] font-mono font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200">
+                              <span className="text-[0.58rem] sm:text-[0.65rem] font-mono font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200">
                                 {school.code}
                               </span>
                             )}
                             {school.city && (
-                              <span className="text-[0.68rem] text-slate-500">· {school.city}</span>
+                              <span className="text-[0.62rem] sm:text-[0.68rem] text-slate-500">· {school.city}</span>
                             )}
                             <span
-                              className={`text-[0.65rem] font-black px-2 py-0.5 rounded-full border uppercase tracking-wider ${
+                              className={`text-[0.58rem] sm:text-[0.65rem] font-black px-1.5 sm:px-2 py-0.5 rounded-full border uppercase tracking-wider ${
                                 isRowBlocked
                                   ? 'bg-rose-50 text-rose-700 border-rose-200'
                                   : 'bg-emerald-50 text-emerald-700 border-emerald-200'
@@ -721,20 +910,22 @@ export const SuperuserConsoleModal: React.FC<SuperuserConsoleModalProps> = ({
                             </span>
                           </div>
 
-                          <div className="text-xs text-slate-600 mt-1 flex items-center gap-2 flex-wrap">
+                          <div className="text-[0.66rem] sm:text-xs text-slate-600 mt-1 flex items-center gap-1.5 sm:gap-2 flex-wrap">
                             <span>
                               Admin: <strong className="text-slate-900">{school.adminName}</strong>
                             </span>
                             <span className="text-slate-300">|</span>
-                            <span className="font-mono text-[0.72rem] text-indigo-700">{school.adminEmail}</span>
-                            <span className="text-slate-300">|</span>
-                            <span className="text-[0.7rem] font-semibold text-slate-500">
+                            <span className="font-mono text-[0.64rem] sm:text-[0.72rem] text-indigo-700 break-all sm:break-normal">
+                              {school.adminEmail}
+                            </span>
+                            <span className="text-slate-300 hidden sm:inline">|</span>
+                            <span className="text-[0.62rem] sm:text-[0.7rem] font-semibold text-slate-500">
                               {school.adminRole || liveAdmin?.role || 'Principal'}
                             </span>
                           </div>
 
                           {isRowBlocked && reason && (
-                            <div className="mt-1.5 text-[0.7rem] font-semibold text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-2.5 py-1 inline-block">
+                            <div className="mt-1.5 text-[0.64rem] sm:text-[0.7rem] font-semibold text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-2 py-1 inline-block">
                               Blocked reason: {reason}
                             </div>
                           )}
@@ -747,10 +938,10 @@ export const SuperuserConsoleModal: React.FC<SuperuserConsoleModalProps> = ({
                               type="button"
                               disabled={isBusy}
                               onClick={() => handleUnblock(school)}
-                              className="h-8 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                              className="h-7 sm:h-8 px-2.5 sm:px-3 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[0.68rem] sm:text-xs font-bold flex items-center gap-1 cursor-pointer disabled:opacity-50"
                             >
-                              <CheckCircle2 className="w-3.5 h-3.5" />
-                              <span>Unblock Admin</span>
+                              <CheckCircle2 className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                              <span>Unblock</span>
                             </button>
                           ) : (
                             <button
@@ -762,10 +953,10 @@ export const SuperuserConsoleModal: React.FC<SuperuserConsoleModalProps> = ({
                                 setReassignSchoolId(null);
                                 setConfirmDeleteId(null);
                               }}
-                              className="h-8 px-3 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                              className="h-7 sm:h-8 px-2.5 sm:px-3 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-[0.68rem] sm:text-xs font-bold flex items-center gap-1 cursor-pointer disabled:opacity-50"
                             >
-                              <Ban className="w-3.5 h-3.5" />
-                              <span>Block Admin</span>
+                              <Ban className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                              <span>Block</span>
                             </button>
                           )}
 
@@ -786,9 +977,9 @@ export const SuperuserConsoleModal: React.FC<SuperuserConsoleModalProps> = ({
                                 setConfirmDeleteId(null);
                               }
                             }}
-                            className="h-8 px-3 rounded-lg bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                            className="h-7 sm:h-8 px-2.5 sm:px-3 rounded-lg bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 text-[0.68rem] sm:text-xs font-bold flex items-center gap-1 cursor-pointer"
                           >
-                            <UserCog className="w-3.5 h-3.5 text-indigo-600" />
+                            <UserCog className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-indigo-600" />
                             <span>Reassign</span>
                           </button>
 
@@ -800,37 +991,37 @@ export const SuperuserConsoleModal: React.FC<SuperuserConsoleModalProps> = ({
                               setBlockingSchoolId(null);
                               setReassignSchoolId(null);
                             }}
-                            className="h-8 px-2.5 rounded-lg bg-white border border-rose-200 hover:bg-rose-50 text-rose-600 text-xs font-bold flex items-center gap-1 cursor-pointer"
+                            className="h-7 sm:h-8 px-2 rounded-lg bg-white border border-rose-200 hover:bg-rose-50 text-rose-600 text-[0.68rem] sm:text-xs font-bold flex items-center gap-1 cursor-pointer"
                             title="Delete school and admin entry"
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
+                            <Trash2 className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                           </button>
                         </div>
                       </div>
 
                       {/* Inline Block Confirmation */}
                       {blockingSchoolId === school.id && (
-                        <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                        <div className="p-2.5 sm:p-3 bg-rose-50 border border-rose-200 rounded-xl flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                           <input
                             type="text"
                             value={blockReason}
                             onChange={(e) => setBlockReason(e.target.value)}
-                            placeholder="Optional block reason (e.g. Policy violation / Term ended)"
-                            className="flex-1 h-8 px-3 rounded-lg border border-rose-300 bg-white text-xs outline-none focus:border-rose-600"
+                            placeholder="Optional block reason..."
+                            className="flex-1 h-8 px-2.5 rounded-lg border border-rose-300 bg-white text-[0.7rem] sm:text-xs outline-none focus:border-rose-600"
                           />
                           <div className="flex items-center gap-1.5">
                             <button
                               type="button"
                               disabled={isBusy}
                               onClick={() => handleConfirmBlock(school)}
-                              className="h-8 px-3 rounded-lg bg-rose-700 hover:bg-rose-800 text-white text-xs font-bold cursor-pointer disabled:opacity-50"
+                              className="h-7.5 sm:h-8 px-3 rounded-lg bg-rose-700 hover:bg-rose-800 text-white text-[0.68rem] sm:text-xs font-bold cursor-pointer disabled:opacity-50"
                             >
                               {isBusy ? 'Blocking...' : 'Confirm Block'}
                             </button>
                             <button
                               type="button"
                               onClick={() => setBlockingSchoolId(null)}
-                              className="h-8 px-3 rounded-lg bg-white border border-slate-300 text-slate-700 text-xs font-bold cursor-pointer"
+                              className="h-7.5 sm:h-8 px-3 rounded-lg bg-white border border-slate-300 text-slate-700 text-[0.68rem] sm:text-xs font-bold cursor-pointer"
                             >
                               Cancel
                             </button>
@@ -840,20 +1031,20 @@ export const SuperuserConsoleModal: React.FC<SuperuserConsoleModalProps> = ({
 
                       {/* Inline Reassign Form */}
                       {reassignSchoolId === school.id && (
-                        <div className="p-3 bg-indigo-50/70 border border-indigo-200 rounded-xl grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2 items-center">
+                        <div className="p-2.5 sm:p-3 bg-indigo-50/70 border border-indigo-200 rounded-xl grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2 items-center">
                           <input
                             type="text"
                             value={newAdminName}
                             onChange={(e) => setNewAdminName(e.target.value)}
                             placeholder="New Admin Name"
-                            className="h-8 px-2.5 rounded-lg border border-indigo-200 bg-white text-xs font-semibold outline-none focus:border-indigo-600"
+                            className="h-8 px-2.5 rounded-lg border border-indigo-200 bg-white text-[0.7rem] sm:text-xs font-semibold outline-none focus:border-indigo-600"
                           />
                           <input
                             type="email"
                             value={newAdminEmail}
                             onChange={(e) => setNewAdminEmail(e.target.value)}
                             placeholder="New Admin Login ID (Email)"
-                            className="h-8 px-2.5 rounded-lg border border-indigo-200 bg-white text-xs font-semibold outline-none focus:border-indigo-600"
+                            className="h-8 px-2.5 rounded-lg border border-indigo-200 bg-white text-[0.7rem] sm:text-xs font-semibold outline-none focus:border-indigo-600"
                           />
                           <div className="flex items-center gap-1">
                             <div className="relative flex-1">
@@ -862,7 +1053,7 @@ export const SuperuserConsoleModal: React.FC<SuperuserConsoleModalProps> = ({
                                 value={newAdminPassword}
                                 onChange={(e) => setNewAdminPassword(e.target.value)}
                                 placeholder="Password (optional)"
-                                className="w-full h-8 pl-2.5 pr-7 rounded-lg border border-indigo-200 bg-white text-xs font-semibold outline-none focus:border-indigo-600"
+                                className="w-full h-8 pl-2.5 pr-7 rounded-lg border border-indigo-200 bg-white text-[0.7rem] sm:text-xs font-semibold outline-none focus:border-indigo-600"
                               />
                               <button
                                 type="button"
@@ -879,7 +1070,7 @@ export const SuperuserConsoleModal: React.FC<SuperuserConsoleModalProps> = ({
                                 setNewAdminPassword(generateStrongPassword());
                                 setShowReassignPassword(true);
                               }}
-                              className="h-8 px-2 rounded-lg bg-white hover:bg-indigo-100 border border-indigo-200 text-indigo-700 text-[0.68rem] font-bold flex items-center gap-1 cursor-pointer shrink-0"
+                              className="h-8 px-2 rounded-lg bg-white hover:bg-indigo-100 border border-indigo-200 text-indigo-700 text-[0.64rem] sm:text-[0.68rem] font-bold flex items-center gap-1 cursor-pointer shrink-0"
                               title="Generate random password"
                             >
                               <Wand2 className="w-3 h-3" />
@@ -889,7 +1080,7 @@ export const SuperuserConsoleModal: React.FC<SuperuserConsoleModalProps> = ({
                           <select
                             value={newAdminRole}
                             onChange={(e) => setNewAdminRole(e.target.value as 'Principal' | 'Administrator')}
-                            className="h-8 px-2 rounded-lg border border-indigo-200 bg-white text-xs font-semibold outline-none focus:border-indigo-600"
+                            className="h-8 px-2 rounded-lg border border-indigo-200 bg-white text-[0.7rem] sm:text-xs font-semibold outline-none focus:border-indigo-600"
                           >
                             <option value="Principal">Principal</option>
                             <option value="Administrator">Administrator</option>
@@ -899,14 +1090,14 @@ export const SuperuserConsoleModal: React.FC<SuperuserConsoleModalProps> = ({
                               type="button"
                               disabled={isBusy}
                               onClick={() => handleConfirmReassign(school)}
-                              className="h-8 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold cursor-pointer flex-1 disabled:opacity-50"
+                              className="h-8 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-[0.68rem] sm:text-xs font-bold cursor-pointer flex-1 disabled:opacity-50"
                             >
                               {isBusy ? 'Saving...' : 'Save Admin'}
                             </button>
                             <button
                               type="button"
                               onClick={() => setReassignSchoolId(null)}
-                              className="h-8 px-2.5 rounded-lg bg-white border border-slate-300 text-slate-700 text-xs font-bold cursor-pointer"
+                              className="h-8 px-2.5 rounded-lg bg-white border border-slate-300 text-slate-700 text-[0.68rem] sm:text-xs font-bold cursor-pointer"
                             >
                               Cancel
                             </button>
@@ -916,23 +1107,23 @@ export const SuperuserConsoleModal: React.FC<SuperuserConsoleModalProps> = ({
 
                       {/* Inline Delete Confirmation */}
                       {confirmDeleteId === school.id && (
-                        <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl flex items-center justify-between gap-2 flex-wrap">
-                          <span className="text-xs font-bold text-rose-900">
-                            Remove &ldquo;{school.name}&rdquo; and revoke admin assignment for {school.adminEmail}?
+                        <div className="p-2.5 sm:p-3 bg-rose-50 border border-rose-200 rounded-xl flex items-center justify-between gap-2 flex-wrap">
+                          <span className="text-[0.68rem] sm:text-xs font-bold text-rose-900">
+                            Remove &ldquo;{school.name}&rdquo; and revoke {school.adminEmail}?
                           </span>
                           <div className="flex items-center gap-1.5">
                             <button
                               type="button"
                               disabled={isBusy}
                               onClick={() => handleConfirmDelete(school)}
-                              className="h-8 px-3 rounded-lg bg-rose-700 hover:bg-rose-800 text-white text-xs font-bold cursor-pointer disabled:opacity-50"
+                              className="h-7.5 sm:h-8 px-3 rounded-lg bg-rose-700 hover:bg-rose-800 text-white text-[0.68rem] sm:text-xs font-bold cursor-pointer disabled:opacity-50"
                             >
                               {isBusy ? 'Deleting...' : 'Confirm Delete'}
                             </button>
                             <button
                               type="button"
                               onClick={() => setConfirmDeleteId(null)}
-                              className="h-8 px-3 rounded-lg bg-white border border-slate-300 text-slate-700 text-xs font-bold cursor-pointer"
+                              className="h-7.5 sm:h-8 px-3 rounded-lg bg-white border border-slate-300 text-slate-700 text-[0.68rem] sm:text-xs font-bold cursor-pointer"
                             >
                               Cancel
                             </button>

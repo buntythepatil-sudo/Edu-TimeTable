@@ -6,8 +6,11 @@ import {
   onAuthStateChanged,
   updateProfile as updateFirebaseUserAuth,
   updatePassword,
+  linkWithCredential,
   EmailAuthProvider,
   reauthenticateWithCredential,
+  reauthenticateWithPopup,
+  sendPasswordResetEmail,
   User as FirebaseUser,
 } from 'firebase/auth';
 import {
@@ -34,6 +37,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isSuperuser: boolean;
   isAuthorizedFacilityUser: boolean;
+  hasPasswordProvider: boolean;
   isBlocked: boolean;
   blockedDetails: BlockedDetails | null;
   assignedAdminRecord: SchoolAdmin | null;
@@ -45,6 +49,7 @@ interface AuthContextType {
   logout: () => Promise<void>;
   updateProfile: (updates: Partial<UserProfile>) => Promise<{ success: boolean; error?: string }>;
   changePassword: (oldPass: string, newPass: string) => Promise<{ success: boolean; error?: string }>;
+  sendResetEmail: (email: string) => Promise<{ success: boolean; error?: string }>;
   uploadAvatarImage: (file: File) => Promise<{ success: boolean; avatarUrl?: string; error?: string }>;
 }
 
@@ -117,6 +122,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<UserProfile | null>(null);
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
   const [isSuperuser, setIsSuperuser] = useState<boolean>(false);
+  const [hasPasswordProvider, setHasPasswordProvider] = useState<boolean>(false);
   const [isBlocked, setIsBlocked] = useState<boolean>(false);
   const [blockedDetails, setBlockedDetails] = useState<BlockedDetails | null>(null);
   const [assignedAdminRecord, setAssignedAdminRecord] = useState<SchoolAdmin | null>(null);
@@ -147,6 +153,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setFirebaseUser(null);
         setUser(null);
         setIsSuperuser(false);
+        setHasPasswordProvider(false);
         setIsBlocked(false);
         setBlockedDetails(null);
         setAssignedAdminRecord(null);
@@ -158,6 +165,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setFirebaseUser(null);
         setUser(null);
         setIsSuperuser(false);
+        setHasPasswordProvider(false);
         setIsBlocked(false);
         setBlockedDetails(null);
         setAssignedAdminRecord(null);
@@ -167,6 +175,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       setFirebaseUser(fbUser);
+      setHasPasswordProvider(fbUser.providerData.some((p) => p.providerId === 'password'));
       const emailLower = (fbUser.email || '').trim().toLowerCase();
       const superCheck = isSuperuserFirebaseUser(fbUser);
 
@@ -445,7 +454,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           authErr?.code === 'auth/invalid-credential' ||
           authErr?.code === 'auth/wrong-password'
         ) {
-          return { success: false, error: 'Incorrect Login ID or password. Please verify credentials with the Superuser.' };
+          if (cleanEmail === SUPERUSER_EMAIL.toLowerCase()) {
+            return {
+              success: false,
+              error:
+                'Incorrect password or no password set yet for Superuser. Sign in via Google first, then create your Superuser password in Superuser Console or Security & Password.',
+            };
+          }
+          return {
+            success: false,
+            error: 'Incorrect Login ID or password. Please verify credentials with the Superuser.',
+          };
         }
         if (authErr?.code === 'auth/operation-not-allowed') {
           return {
@@ -519,6 +538,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUser(null);
     setFirebaseUser(null);
     setIsSuperuser(false);
+    setHasPasswordProvider(false);
     setIsBlocked(false);
     setBlockedDetails(null);
     setAssignedAdminRecord(null);
@@ -628,22 +648,86 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const changePassword = async (oldPass: string, newPass: string): Promise<{ success: boolean; error?: string }> => {
     const fbUser = auth.currentUser;
-    if (!user || !fbUser || fbUser.isAnonymous) {
+    if (!user || !fbUser || fbUser.isAnonymous || !fbUser.email) {
       return { success: false, error: 'Not authenticated' };
     }
     if (newPass.length < 6) {
-      return { success: false, error: 'New password must be at least 6 characters.' };
+      return { success: false, error: 'Password must be at least 6 characters.' };
     }
 
+    const alreadyHasPassword = fbUser.providerData.some((p) => p.providerId === 'password');
+
     try {
-      if (fbUser.email && fbUser.providerData.some((p) => p.providerId === 'password')) {
+      if (alreadyHasPassword) {
+        if (!oldPass) {
+          return { success: false, error: 'Please enter your current password.' };
+        }
         const credential = EmailAuthProvider.credential(fbUser.email, oldPass);
         await reauthenticateWithCredential(fbUser, credential);
+        await updatePassword(fbUser, newPass);
+      } else {
+        const emailCredential = EmailAuthProvider.credential(fbUser.email, newPass);
+        try {
+          await linkWithCredential(fbUser, emailCredential);
+        } catch (linkErr: any) {
+          if (linkErr?.code === 'auth/requires-recent-login') {
+            await reauthenticateWithPopup(fbUser, googleProvider);
+            await linkWithCredential(fbUser, emailCredential);
+          } else if (linkErr?.code === 'auth/provider-already-linked') {
+            await updatePassword(fbUser, newPass);
+          } else {
+            throw linkErr;
+          }
+        }
       }
-      await updatePassword(fbUser, newPass);
+
+      try {
+        await fbUser.reload();
+      } catch {
+        // ignore reload failure
+      }
+      setFirebaseUser(auth.currentUser);
+      setHasPasswordProvider(
+        Boolean(auth.currentUser?.providerData?.some((p) => p.providerId === 'password') ?? true)
+      );
       return { success: true };
     } catch (err: any) {
-      return { success: false, error: err?.message || 'Could not update password. Please verify your current password.' };
+      if (err?.code === 'auth/operation-not-allowed') {
+        return {
+          success: false,
+          error:
+            'Email/Password sign-in provider is disabled in Firebase Console. Enable Authentication -> Sign-in method -> Email/Password first.',
+        };
+      }
+      if (err?.code === 'auth/wrong-password' || err?.code === 'auth/invalid-credential') {
+        return { success: false, error: 'Current password is incorrect.' };
+      }
+      if (err?.code === 'auth/popup-closed-by-user') {
+        return { success: false, error: 'Google verification popup was closed before finishing.' };
+      }
+      if (err?.code === 'auth/weak-password') {
+        return { success: false, error: 'Password must be at least 6 characters.' };
+      }
+      return { success: false, error: err?.message || 'Could not save password. Please try again.' };
+    }
+  };
+
+  const sendResetEmail = async (email: string): Promise<{ success: boolean; error?: string }> => {
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail) {
+      return { success: false, error: 'Please enter your Login ID (email) first.' };
+    }
+    try {
+      await sendPasswordResetEmail(auth, cleanEmail);
+      return { success: true };
+    } catch (err: any) {
+      if (err?.code === 'auth/operation-not-allowed') {
+        return {
+          success: false,
+          error: 'Email/Password sign-in is disabled in Firebase Console. Enable it under Authentication -> Sign-in method.',
+        };
+      }
+      return { success: false, error: err?.message || 'Failed to send password reset email.' };
     }
   };
 
@@ -662,6 +746,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isAuthenticated,
         isSuperuser,
         isAuthorizedFacilityUser,
+        hasPasswordProvider,
         isBlocked,
         blockedDetails,
         assignedAdminRecord,
@@ -673,6 +758,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         logout,
         updateProfile,
         changePassword,
+        sendResetEmail,
         uploadAvatarImage,
       }}
     >

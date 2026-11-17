@@ -58,6 +58,7 @@ import {
   Minimize2,
   BarChart3,
   Crown,
+  KeyRound,
 } from 'lucide-react';
 
 export type RibbonTabType = 'home' | 'teachers' | 'classes' | 'subjects' | 'exports' | 'settings' | 'file';
@@ -87,7 +88,7 @@ interface RibbonMenuProps {
   onOpenRetrieve: () => void;
   onExportJSON: () => void;
   onImportJSON: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  onOpenProfile: () => void;
+  onOpenProfile: (tab?: 'profile' | 'institution' | 'security') => void;
   onOpenAuth: () => void;
   onOpenSuperuserConsole?: () => void;
   onLoadTimetable: (id: string) => void;
@@ -483,12 +484,24 @@ export const RibbonMenu: React.FC<RibbonMenuProps> = ({
                   type="button"
                   onClick={() => {
                     setUserDropdownOpen(false);
-                    onOpenProfile();
+                    onOpenProfile('profile');
                   }}
                   className="w-full text-left flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 transition-colors cursor-pointer"
                 >
                   <UserIcon className="w-3.5 h-3.5 text-indigo-600" />
                   <span>Profile &amp; Institution</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setUserDropdownOpen(false);
+                    onOpenProfile('security');
+                  }}
+                  className="w-full text-left flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 transition-colors cursor-pointer"
+                >
+                  <KeyRound className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Security &amp; Password</span>
                 </button>
 
                 <div className="h-[1px] bg-slate-100 my-1" />

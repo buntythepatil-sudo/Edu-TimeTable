@@ -187,6 +187,7 @@ function TimetableApp() {
   // Modals & Panels
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [profileModalOpen, setProfileModalOpen] = useState(false);
+  const [profileModalTab, setProfileModalTab] = useState<'profile' | 'institution' | 'security'>('profile');
   const [superuserConsoleOpen, setSuperuserConsoleOpen] = useState(false);
   const [conflictModalOpen, setConflictModalOpen] = useState(false);
   const [summaryModalClass, setSummaryModalClass] = useState<string | null>(null);
@@ -1411,7 +1412,10 @@ function TimetableApp() {
         onOpenRetrieve={handleOpenRetrieve}
         onExportJSON={handleExportJSON}
         onImportJSON={handleImportJSON}
-        onOpenProfile={() => setProfileModalOpen(true)}
+        onOpenProfile={(tab) => {
+          setProfileModalTab(tab || 'profile');
+          setProfileModalOpen(true);
+        }}
         onOpenAuth={() => setAuthModalOpen(true)}
         onOpenSuperuserConsole={() => setSuperuserConsoleOpen(true)}
         onLoadTimetable={handleLoadTimetable}
@@ -1784,6 +1788,7 @@ function TimetableApp() {
           isOpen={profileModalOpen}
           onClose={() => setProfileModalOpen(false)}
           savedCount={savedTimetables.length}
+          initialTab={profileModalTab}
         />
 
         <SuperuserConsoleModal

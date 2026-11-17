@@ -11,14 +11,16 @@ import {
   CalendarRange,
   KeyRound,
   X,
+  CheckCircle2,
 } from 'lucide-react';
 
 export const LoginScreen: React.FC = () => {
-  const { login, loginWithGoogle, accessError, clearAccessError } = useAuth();
+  const { login, loginWithGoogle, sendResetEmail, accessError, clearAccessError } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [resetMessage, setResetMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const displayedError = errorMessage || accessError;
@@ -30,6 +32,7 @@ export const LoginScreen: React.FC = () => {
 
   const handleGoogleSignIn = async () => {
     setErrorMessage('');
+    setResetMessage('');
     if (accessError) clearAccessError();
     setIsSubmitting(true);
     try {
@@ -44,9 +47,32 @@ export const LoginScreen: React.FC = () => {
     }
   };
 
+  const handleResetPassword = async () => {
+    setErrorMessage('');
+    setResetMessage('');
+    if (!email.trim()) {
+      setErrorMessage('Enter your Login ID (email) above first, then click Forgot / Reset Password.');
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      const res = await sendResetEmail(email);
+      if (res.success) {
+        setResetMessage(
+          `If an Email/Password login exists for ${email.trim().toLowerCase()}, a password reset link has been sent. (If you previously signed in with Google only, sign in via Google first to create a password.)`
+        );
+      } else if (res.error) {
+        setErrorMessage(res.error);
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
+    setResetMessage('');
     if (accessError) clearAccessError();
     setIsSubmitting(true);
 
@@ -116,6 +142,13 @@ export const LoginScreen: React.FC = () => {
               </div>
             )}
 
+            {resetMessage && (
+              <div className="mb-4 p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 text-xs font-medium flex items-start gap-2.5">
+                <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600 mt-0.5" />
+                <span className="flex-1 leading-relaxed">{resetMessage}</span>
+              </div>
+            )}
+
             {/* Unified Google Sign-In */}
             <button
               type="button"
@@ -173,9 +206,19 @@ export const LoginScreen: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-[0.68rem] font-bold uppercase tracking-wider text-slate-500 mb-1">
-                  Password
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-[0.68rem] font-bold uppercase tracking-wider text-slate-500">
+                    Password
+                  </label>
+                  <button
+                    type="button"
+                    disabled={isSubmitting}
+                    onClick={handleResetPassword}
+                    className="text-[0.68rem] font-bold text-indigo-600 hover:text-indigo-700 cursor-pointer disabled:opacity-50"
+                  >
+                    Forgot / Reset password?
+                  </button>
+                </div>
                 <div className="relative">
                   <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
                   <input
@@ -212,7 +255,7 @@ export const LoginScreen: React.FC = () => {
             <div className="mt-5 pt-4 border-t border-slate-100 flex items-start gap-2 text-[0.7rem] text-slate-500 leading-relaxed">
               <KeyRound className="w-3.5 h-3.5 text-indigo-500 shrink-0 mt-0.5" />
               <span>
-                School Admin Login IDs and passwords are issued exclusively by the System Superuser. Accounts blocked or unregistered cannot access the facility.
+                School Admin Login IDs and passwords are issued exclusively by the System Superuser. Superuser can set or change their Login ID password inside Superuser Console or Security &amp; Password after signing in with Google.
               </span>
             </div>
           </div>

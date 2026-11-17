@@ -27,17 +27,26 @@ import {
   CheckCircle2,
   AlertCircle,
   RefreshCw,
+  Eye,
+  EyeOff,
+  Wand2,
 } from 'lucide-react';
 
 interface UserProfileModalProps {
   isOpen: boolean;
   onClose: () => void;
   savedCount: number;
+  initialTab?: 'profile' | 'institution' | 'security';
 }
 
-export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onClose, savedCount }) => {
-  const { user, isSuperuser, updateProfile, changePassword, uploadAvatarImage, logout } = useAuth();
-  const [activeTab, setActiveTab] = useState<'profile' | 'institution' | 'security'>('profile');
+export const UserProfileModal: React.FC<UserProfileModalProps> = ({
+  isOpen,
+  onClose,
+  savedCount,
+  initialTab = 'profile',
+}) => {
+  const { user, isSuperuser, hasPasswordProvider, updateProfile, changePassword, uploadAvatarImage, logout } = useAuth();
+  const [activeTab, setActiveTab] = useState<'profile' | 'institution' | 'security'>(initialTab);
 
   // Form states initialized from active user
   const [username, setUsername] = useState('');
@@ -62,9 +71,19 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onCl
   const [oldPassword, setOldPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [isSavingPassword, setIsSavingPassword] = useState(false);
   const [passwordStatus, setPasswordStatus] = useState<{ success?: boolean; message?: string } | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Sync tab when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      setActiveTab(initialTab || 'profile');
+      setPasswordStatus(null);
+    }
+  }, [isOpen, initialTab]);
 
   // Populate state whenever modal opens or user updates
   useEffect(() => {
@@ -150,29 +169,49 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onCl
     }
   };
 
-  // Handle password update
+  const generateStrongPassword = () => {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%';
+    let pass = '';
+    for (let i = 0; i < 12; i++) {
+      pass += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return pass;
+  };
+
+  // Handle password creation or update
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setPasswordStatus(null);
 
     if (newPassword.length < 6) {
-      setPasswordStatus({ success: false, message: 'New password must be at least 6 characters long.' });
+      setPasswordStatus({ success: false, message: 'Password must be at least 6 characters long.' });
       return;
     }
 
     if (newPassword !== confirmPassword) {
-      setPasswordStatus({ success: false, message: 'New passwords do not match.' });
+      setPasswordStatus({ success: false, message: 'Passwords do not match.' });
       return;
     }
 
-    const res = await changePassword(oldPassword, newPassword);
-    if (res.success) {
-      setPasswordStatus({ success: true, message: 'Password updated successfully!' });
-      setOldPassword('');
-      setNewPassword('');
-      setConfirmPassword('');
-    } else {
-      setPasswordStatus({ success: false, message: res.error || 'Failed to update password.' });
+    setIsSavingPassword(true);
+    try {
+      const wasCreate = !hasPasswordProvider;
+      const res = await changePassword(oldPassword, newPassword);
+      if (res.success) {
+        setPasswordStatus({
+          success: true,
+          message: wasCreate
+            ? `Password created! You can now sign in with Login ID (${user.email}) and this password.`
+            : 'Password updated successfully!',
+        });
+        setOldPassword('');
+        setNewPassword('');
+        setConfirmPassword('');
+      } else {
+        setPasswordStatus({ success: false, message: res.error || 'Failed to save password.' });
+      }
+    } finally {
+      setIsSavingPassword(false);
     }
   };
 
@@ -650,31 +689,66 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onCl
             <div className="flex flex-col gap-4">
               {/* Account Meta Info */}
               <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl flex flex-col gap-2">
-                <div className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
-                  <ShieldCheck className="w-4 h-4 text-indigo-600" />
-                  <span>Principal Account Credentials</span>
+                <div className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center justify-between gap-2 flex-wrap">
+                  <span className="flex items-center gap-1.5">
+                    <ShieldCheck className="w-4 h-4 text-indigo-600" />
+                    <span>{isSuperuser ? 'Superuser Account Credentials' : 'Admin Account Credentials'}</span>
+                  </span>
+                  <span
+                    className={`text-[0.65rem] font-bold px-2 py-0.5 rounded-full border ${
+                      hasPasswordProvider
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                        : 'bg-amber-50 text-amber-800 border-amber-200'
+                    }`}
+                  >
+                    {hasPasswordProvider ? 'Login ID & Password Enabled' : 'Google Sign-In Only (No Password Set)'}
+                  </span>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs pt-1">
+                  <div>
+                    <span className="text-slate-500">Login ID (Email):</span>
+                    <div className="font-mono text-slate-800 text-[0.72rem] truncate bg-white p-1.5 rounded border border-slate-200 mt-0.5">
+                      {user.email}
+                    </div>
+                  </div>
                   <div>
                     <span className="text-slate-500">Firebase User ID:</span>
                     <div className="font-mono text-slate-800 text-[0.7rem] truncate bg-white p-1.5 rounded border border-slate-200 mt-0.5">
                       {user.uid || user.id}
                     </div>
                   </div>
-                  <div>
-                    <span className="text-slate-500">Account Created:</span>
-                    <div className="text-slate-800 text-xs font-semibold bg-white p-1.5 rounded border border-slate-200 mt-0.5">
-                      {new Date(user.createdAt).toLocaleDateString(undefined, { dateStyle: 'medium' })}
-                    </div>
-                  </div>
                 </div>
               </div>
 
-              {/* Password update form */}
+              {/* Password create / update form */}
               <form onSubmit={handleChangePassword} className="flex flex-col gap-3.5">
-                <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-                  Update Account Password
-                </h4>
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                      {hasPasswordProvider
+                        ? 'Update Account Password'
+                        : `Create Password for ${isSuperuser ? 'Superuser' : 'Account'} Login ID`}
+                    </h4>
+                    <p className="text-[0.7rem] text-slate-500 mt-0.5">
+                      {hasPasswordProvider
+                        ? 'Verify your current password to change it.'
+                        : `Link a password to ${user.email} so you can sign in with Login ID & Password as well as Google.`}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const generated = generateStrongPassword();
+                      setNewPassword(generated);
+                      setConfirmPassword(generated);
+                      setShowNewPassword(true);
+                    }}
+                    className="h-8 px-2.5 rounded-lg bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 text-[0.7rem] font-bold flex items-center gap-1 cursor-pointer"
+                  >
+                    <Wand2 className="w-3 h-3" />
+                    <span>Generate Strong Password</span>
+                  </button>
+                </div>
 
                 {passwordStatus && (
                   <div
@@ -684,50 +758,62 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onCl
                         : 'bg-rose-50 text-rose-700 border border-rose-200'
                     }`}
                   >
-                    {passwordStatus.success ? <Check className="w-4 h-4" /> : <BadgeAlert className="w-4 h-4" />}
+                    {passwordStatus.success ? <Check className="w-4 h-4 shrink-0" /> : <BadgeAlert className="w-4 h-4 shrink-0" />}
                     <span>{passwordStatus.message}</span>
                   </div>
                 )}
 
-                <div>
-                  <label className="block text-[0.7rem] font-bold uppercase tracking-wider text-slate-600 mb-1">
-                    Current Password
-                  </label>
-                  <input
-                    type="password"
-                    required
-                    value={oldPassword}
-                    onChange={(e) => setOldPassword(e.target.value)}
-                    placeholder="••••••••"
-                    className="w-full h-10 px-3 rounded-lg border border-slate-200 text-sm text-slate-900 outline-none focus:border-indigo-600 bg-white"
-                  />
-                </div>
+                {hasPasswordProvider && (
+                  <div>
+                    <label className="block text-[0.7rem] font-bold uppercase tracking-wider text-slate-600 mb-1">
+                      Current Password
+                    </label>
+                    <input
+                      type="password"
+                      required
+                      value={oldPassword}
+                      onChange={(e) => setOldPassword(e.target.value)}
+                      placeholder="••••••••"
+                      className="w-full h-10 px-3 rounded-lg border border-slate-200 text-sm text-slate-900 outline-none focus:border-indigo-600 bg-white"
+                    />
+                  </div>
+                )}
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                   <div>
                     <label className="block text-[0.7rem] font-bold uppercase tracking-wider text-slate-600 mb-1">
-                      New Password
+                      {hasPasswordProvider ? 'New Password' : 'Create Password'}
                     </label>
-                    <input
-                      type="password"
-                      required
-                      value={newPassword}
-                      onChange={(e) => setNewPassword(e.target.value)}
-                      placeholder="At least 6 characters"
-                      className="w-full h-10 px-3 rounded-lg border border-slate-200 text-sm text-slate-900 outline-none focus:border-indigo-600 bg-white"
-                    />
+                    <div className="relative">
+                      <input
+                        type={showNewPassword ? 'text' : 'password'}
+                        required
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        placeholder="At least 6 characters"
+                        className="w-full h-10 pl-3 pr-10 rounded-lg border border-slate-200 text-sm text-slate-900 outline-none focus:border-indigo-600 bg-white"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowNewPassword(!showNewPassword)}
+                        className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-700 cursor-pointer"
+                        aria-label={showNewPassword ? 'Hide password' : 'Show password'}
+                      >
+                        {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
                   </div>
 
                   <div>
                     <label className="block text-[0.7rem] font-bold uppercase tracking-wider text-slate-600 mb-1">
-                      Confirm New Password
+                      Confirm Password
                     </label>
                     <input
-                      type="password"
+                      type={showNewPassword ? 'text' : 'password'}
                       required
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
-                      placeholder="Repeat new password"
+                      placeholder="Repeat password"
                       className="w-full h-10 px-3 rounded-lg border border-slate-200 text-sm text-slate-900 outline-none focus:border-indigo-600 bg-white"
                     />
                   </div>
@@ -735,10 +821,17 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onCl
 
                 <button
                   type="submit"
-                  className="h-10 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-sm flex items-center justify-center gap-1.5 transition-all self-end px-5 cursor-pointer mt-1"
+                  disabled={isSavingPassword}
+                  className="h-10 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-sm flex items-center justify-center gap-1.5 transition-all self-end px-5 cursor-pointer mt-1 disabled:opacity-50"
                 >
                   <KeyRound className="w-3.5 h-3.5" />
-                  <span>Update Password</span>
+                  <span>
+                    {isSavingPassword
+                      ? 'Saving...'
+                      : hasPasswordProvider
+                      ? 'Update Password'
+                      : 'Create Password'}
+                  </span>
                 </button>
               </form>
             </div>
