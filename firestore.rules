@@ -1,0 +1,283 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Core identity & validation primitives
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedEmail() {
+      return isSignedIn()
+        && request.auth.token.email_verified == true
+        && request.auth.token.email is string;
+    }
+
+    // Superuser identity strictly verified via verified email claim
+    function isSuperuser() {
+      return isVerifiedEmail()
+        && request.auth.token.email == 'buntythepatil@gmail.com';
+    }
+
+    // Strictly verify user's email exists in school_admins and has status == 'active'
+    function isActiveSchoolAdmin() {
+      return isSignedIn()
+        && request.auth.token.email is string
+        && exists(/databases/$(database)/documents/school_admins/$(request.auth.token.email))
+        && get(/databases/$(database)/documents/school_admins/$(request.auth.token.email)).data.status == 'active';
+    }
+
+    // Facility access restricted strictly to verified Superuser or active registered School Admins
+    function isAuthorizedFacilityUser() {
+      return isSuperuser() || isActiveSchoolAdmin();
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidEmailId(id) {
+      return id is string
+        && id.size() >= 5
+        && id.size() <= 128
+        && id.matches('^[^/\\s@]+@[^/\\s@]+\\.[^/\\s@]+$');
+    }
+
+    function isValidUserProfile(data, userId) {
+      return data.keys().hasAll(['id', 'uid', 'username', 'name', 'email', 'role', 'institutionName'])
+        && data.keys().hasOnly([
+          'id', 'uid', 'username', 'name', 'email', 'role', 'institutionName',
+          'schoolId', 'isBlocked', 'institutionLogo', 'avatarUrl', 'department',
+          'phoneNumber', 'bio', 'officeHours', 'qualifications', 'academicYear',
+          'themePreference', 'createdAt', 'updatedAt', 'lastLoginAt', 'savedTimetablesCount'
+        ])
+        && data.id is string && data.id == userId && data.id.size() <= 128
+        && data.uid is string && data.uid == userId && data.uid.size() <= 128
+        && data.username is string && data.username.size() >= 1 && data.username.size() <= 60
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 120
+        && data.email is string && data.email.size() >= 3 && data.email.size() <= 128
+        && data.role in ['Superuser', 'Principal', 'Academic Dean', 'HOD', 'Teacher', 'Administrator']
+        && data.institutionName is string && data.institutionName.size() >= 1 && data.institutionName.size() <= 150
+        && (!('schoolId' in data) || (data.schoolId is string && data.schoolId.size() <= 128))
+        && (!('isBlocked' in data) || (data.isBlocked is bool))
+        && (!('institutionLogo' in data) || (data.institutionLogo is string && data.institutionLogo.size() <= 500000))
+        && (!('avatarUrl' in data) || (data.avatarUrl is string && data.avatarUrl.size() <= 500000))
+        && (!('department' in data) || (data.department is string && data.department.size() <= 120))
+        && (!('phoneNumber' in data) || (data.phoneNumber is string && data.phoneNumber.size() <= 40))
+        && (!('bio' in data) || (data.bio is string && data.bio.size() <= 500))
+        && (!('officeHours' in data) || (data.officeHours is string && data.officeHours.size() <= 120))
+        && (!('qualifications' in data) || (data.qualifications is string && data.qualifications.size() <= 200))
+        && (!('academicYear' in data) || (data.academicYear is string && data.academicYear.size() <= 32))
+        && (!('themePreference' in data) || (data.themePreference in ['system', 'light', 'dark']))
+        && (!('createdAt' in data) || (data.createdAt is string && data.createdAt.size() <= 64))
+        && (!('updatedAt' in data) || (data.updatedAt is string && data.updatedAt.size() <= 64))
+        && (!('lastLoginAt' in data) || (data.lastLoginAt is string && data.lastLoginAt.size() <= 64))
+        && (!('savedTimetablesCount' in data) || (data.savedTimetablesCount is number));
+    }
+
+    function isValidSchool(data, schoolId) {
+      return data.keys().hasAll(['id', 'name', 'adminEmail', 'adminName', 'adminStatus', 'createdBy', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly([
+          'id', 'name', 'code', 'city', 'academicYear', 'adminEmail',
+          'adminName', 'adminRole', 'adminStatus', 'blockedReason', 'blockedAt',
+          'createdBy', 'createdAt', 'updatedAt'
+        ])
+        && data.id is string && data.id == schoolId && isValidId(data.id)
+        && data.name is string && data.name.size() >= 2 && data.name.size() <= 120
+        && data.adminEmail is string && isValidEmailId(data.adminEmail)
+        && data.adminName is string && data.adminName.size() >= 2 && data.adminName.size() <= 100
+        && data.adminStatus in ['active', 'blocked']
+        && data.createdBy is string && data.createdBy.size() >= 1 && data.createdBy.size() <= 128
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp
+        && (!('code' in data) || (data.code is string && data.code.size() <= 32))
+        && (!('city' in data) || (data.city is string && data.city.size() <= 80))
+        && (!('academicYear' in data) || (data.academicYear is string && data.academicYear.size() <= 32))
+        && (!('adminRole' in data) || (data.adminRole in ['Principal', 'Administrator']))
+        && (!('blockedReason' in data) || (data.blockedReason is string && data.blockedReason.size() <= 300))
+        && (!('blockedAt' in data) || (data.blockedAt is string && data.blockedAt.size() <= 64));
+    }
+
+    function isValidSchoolAdmin(data, adminEmail) {
+      return data.keys().hasAll(['email', 'name', 'schoolId', 'schoolName', 'role', 'status', 'createdBy', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly([
+          'email', 'name', 'schoolId', 'schoolName', 'role', 'status',
+          'blockedReason', 'blockedAt', 'blockedBy', 'createdBy', 'createdAt', 'updatedAt'
+        ])
+        && data.email is string && data.email == adminEmail && isValidEmailId(data.email)
+        && data.name is string && data.name.size() >= 2 && data.name.size() <= 100
+        && data.schoolId is string && isValidId(data.schoolId)
+        && data.schoolName is string && data.schoolName.size() >= 2 && data.schoolName.size() <= 120
+        && data.role in ['Principal', 'Administrator']
+        && data.status in ['active', 'blocked']
+        && data.createdBy is string && data.createdBy.size() >= 1 && data.createdBy.size() <= 128
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp
+        && (!('blockedReason' in data) || (data.blockedReason is string && data.blockedReason.size() <= 300))
+        && (!('blockedAt' in data) || (data.blockedAt is string && data.blockedAt.size() <= 64))
+        && (!('blockedBy' in data) || (data.blockedBy is string && data.blockedBy.size() <= 128));
+    }
+
+    function isValidSavedTimetable(data, docId) {
+      return data.keys().hasAll(['id', 'name', 'userId', 'savedAt', 'state', 'settings'])
+        && data.keys().hasOnly(['id', 'name', 'userId', 'savedAt', 'updatedAt', 'state', 'settings', 'notes', 'tags'])
+        && data.id is string && data.id == docId && isValidId(data.id)
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 160
+        && data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128
+        && data.savedAt is string && data.savedAt.size() <= 64
+        && data.state is map
+        && data.settings is map
+        && (!('updatedAt' in data) || (data.updatedAt is string && data.updatedAt.size() <= 64))
+        && (!('notes' in data) || (data.notes is string && data.notes.size() <= 500))
+        && (!('tags' in data) || (data.tags is list && data.tags.size() <= 20));
+    }
+
+    function isValidAutoSaveDraft(data) {
+      return data.keys().hasAll(['id', 'userId', 'savedAt', 'state', 'settings'])
+        && data.keys().hasOnly(['id', 'userId', 'savedAt', 'source', 'state', 'settings', 'summary'])
+        && data.id is string && data.id.size() >= 1 && data.id.size() <= 64
+        && data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128
+        && data.savedAt is string && data.savedAt.size() <= 64
+        && (!('source' in data) || (data.source is string && data.source.size() <= 32))
+        && data.state is map
+        && data.settings is map
+        && (!('summary' in data) || (data.summary is map));
+    }
+
+    // Connection test doc
+    match /test/connection {
+      allow get: if true;
+    }
+
+    // Schools registry (managed exclusively by Superuser)
+    match /schools/{schoolId} {
+      allow get: if isValidId(schoolId)
+        && (isSuperuser() || (isSignedIn() && request.auth.token.email is string && request.auth.token.email == existing().adminEmail && existing().adminStatus == 'active'));
+      allow list: if isSuperuser()
+        || (isSignedIn() && request.auth.token.email is string && existing().adminEmail == request.auth.token.email);
+      allow create: if isSuperuser()
+        && isValidId(schoolId)
+        && isValidSchool(incoming(), schoolId)
+        && incoming().createdBy == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isSuperuser()
+        && isValidId(schoolId)
+        && isValidSchool(incoming(), schoolId)
+        && incoming().id == existing().id
+        && incoming().createdBy == existing().createdBy
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time;
+      allow delete: if isSuperuser() && isValidId(schoolId);
+    }
+
+    // School Admins registry (1 admin per school, managed by Superuser; admins can read their own record)
+    match /school_admins/{adminEmail} {
+      allow get: if isValidEmailId(adminEmail)
+        && (isSuperuser() || (isSignedIn() && request.auth.token.email is string && request.auth.token.email == adminEmail));
+      allow list: if isSuperuser()
+        || (isSignedIn() && request.auth.token.email is string && existing().email == request.auth.token.email);
+      allow create: if isSuperuser()
+        && isValidEmailId(adminEmail)
+        && isValidSchoolAdmin(incoming(), adminEmail)
+        && incoming().email != 'buntythepatil@gmail.com'
+        && incoming().createdBy == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && existsAfter(/databases/$(database)/documents/schools/$(incoming().schoolId));
+      allow update: if isSuperuser()
+        && isValidEmailId(adminEmail)
+        && isValidSchoolAdmin(incoming(), adminEmail)
+        && incoming().email == existing().email
+        && incoming().createdBy == existing().createdBy
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && existsAfter(/databases/$(database)/documents/schools/$(incoming().schoolId));
+      allow delete: if isSuperuser() && isValidEmailId(adminEmail);
+    }
+
+    // User profile documents and subcollections (restricted strictly to Superuser & active School Admins)
+    match /users/{userId} {
+      allow get: if isValidId(userId)
+        && (isSuperuser() || (isOwner(userId) && isActiveSchoolAdmin()));
+      allow list: if isSuperuser();
+      allow create: if isValidId(userId)
+        && (isSuperuser() || (isOwner(userId) && isActiveSchoolAdmin()))
+        && isValidUserProfile(incoming(), userId)
+        && (isSuperuser() || incoming().role != 'Superuser');
+      allow update: if isValidId(userId)
+        && isValidUserProfile(incoming(), userId)
+        && (
+          isSuperuser()
+          || (
+            isOwner(userId)
+            && isActiveSchoolAdmin()
+            && incoming().uid == existing().uid
+            && incoming().id == existing().id
+            && incoming().role != 'Superuser'
+          )
+        );
+      allow delete: if isSuperuser() && isValidId(userId);
+
+      match /autosave/{docId} {
+        allow get: if isValidId(userId) && isValidId(docId)
+          && (isSuperuser() || (isOwner(userId) && isActiveSchoolAdmin()));
+        allow list: if isSuperuser()
+          || (isActiveSchoolAdmin() && request.auth.uid == userId && existing().userId == request.auth.uid);
+        allow create, update: if isValidId(userId) && isValidId(docId)
+          && (isSuperuser() || (isOwner(userId) && isActiveSchoolAdmin()))
+          && isValidAutoSaveDraft(incoming())
+          && incoming().userId == userId;
+        allow delete: if isValidId(userId) && isValidId(docId)
+          && (isSuperuser() || (isOwner(userId) && isActiveSchoolAdmin()));
+      }
+
+      match /timetables/{docId} {
+        allow get: if isValidId(userId) && isValidId(docId)
+          && (isSuperuser() || (isOwner(userId) && isActiveSchoolAdmin()));
+        allow list: if isSuperuser()
+          || (isActiveSchoolAdmin() && request.auth.uid == userId && existing().userId == request.auth.uid);
+        allow create, update: if isValidId(userId) && isValidId(docId)
+          && (isSuperuser() || (isOwner(userId) && isActiveSchoolAdmin()))
+          && isValidSavedTimetable(incoming(), docId)
+          && incoming().userId == userId;
+        allow delete: if isValidId(userId) && isValidId(docId)
+          && (isSuperuser() || (isOwner(userId) && isActiveSchoolAdmin()));
+      }
+    }
+
+    // User-scoped saved timetables collection (restricted strictly to Superuser & active School Admins)
+    match /saved_timetables/{timetableId} {
+      allow get: if isValidId(timetableId)
+        && (isSuperuser() || (isActiveSchoolAdmin() && existing().userId == request.auth.uid));
+      allow list: if isSuperuser()
+        || (isActiveSchoolAdmin() && existing().userId == request.auth.uid);
+      allow create: if isValidId(timetableId)
+        && isAuthorizedFacilityUser()
+        && isValidSavedTimetable(incoming(), timetableId)
+        && (isSuperuser() || incoming().userId == request.auth.uid);
+      allow update: if isValidId(timetableId)
+        && isAuthorizedFacilityUser()
+        && isValidSavedTimetable(incoming(), timetableId)
+        && (isSuperuser() || (existing().userId == request.auth.uid && incoming().userId == existing().userId));
+      allow delete: if isValidId(timetableId)
+        && (isSuperuser() || (isActiveSchoolAdmin() && existing().userId == request.auth.uid));
+    }
+  }
+}

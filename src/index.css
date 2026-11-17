@@ -1,0 +1,245 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --bg: #f8fafc;
+    --panel: #ffffff;
+    --panel2: #f1f5f9;
+    --border: #e2e8f0;
+    --border2: #cbd5e1;
+    --ink: #0f172a;
+    --ink2: #334155;
+    --ink3: #64748b;
+    --accent: #4f46e5;
+    --accent-lt: #eef2ff;
+    --accent2: #0f172a;
+    --accent3: #059669;
+    --red: #e11d48;
+    --radius: 12px;
+    --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  }
+
+  body {
+    font-family: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background-color: #f8fafc;
+    color: #0f172a;
+  }
+
+  code, kbd, samp, pre {
+    font-family: 'JetBrains Mono', monospace;
+  }
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Geometric Balance Color Theme for Subjects in Timetable Grid */
+.cc0 { background: #eef2ff; border-left: 3.5px solid #4f46e5; }
+.cc1 { background: #fdf2f8; border-left: 3.5px solid #db2777; }
+.cc2 { background: #ecfdf5; border-left: 3.5px solid #059669; }
+.cc3 { background: #fffbeb; border-left: 3.5px solid #d97706; }
+.cc4 { background: #f5f3ff; border-left: 3.5px solid #7c3aed; }
+.cc5 { background: #fef2f2; border-left: 3.5px solid #e11d48; }
+.cc6 { background: #f0fdfa; border-left: 3.5px solid #0d9488; }
+.cc7 { background: #f0f9ff; border-left: 3.5px solid #0284c7; }
+.cc8 { background: #fff7ed; border-left: 3.5px solid #ea580c; }
+
+/* ==========================================================================
+   PRINT CSS MEDIA QUERY — OPTIMIZED FOR STANDARD A4 PAPER PRINTING
+   ========================================================================== */
+@media print {
+  @page {
+    size: A4 landscape;
+    margin: 25.4mm;
+  }
+
+  /* Force background colors and borders to print accurately */
+  *,
+  *::before,
+  *::after {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+
+  /* Unconstrain viewport layout for printable paper flow */
+  html,
+  body,
+  #root,
+  .app-viewport,
+  .app-container,
+  .main-split-body {
+    width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+    position: static !important;
+    background: #ffffff !important;
+    color: #0f172a !important;
+    font-size: 10pt !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Hide all non-essential elements: buttons, modals, config panels, toolbars */
+  header,
+  #app-header,
+  #config-panel,
+  #resize-divider,
+  #generator-bar,
+  .print-hidden,
+  .no-print,
+  button,
+  input,
+  select,
+  textarea,
+  [role="dialog"],
+  .modal-overlay,
+  .toast-popup,
+  ::-webkit-scrollbar {
+    display: none !important;
+    visibility: hidden !important;
+    height: 0 !important;
+    width: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Timetable container print styling */
+  .timetable-area-container,
+  .timetable-sheet {
+    width: 100% !important;
+    height: auto !important;
+    max-width: 100% !important;
+    overflow: visible !important;
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Timetable Table Grid Formatting for A4 Paper */
+  .timetable-table {
+    width: 100% !important;
+    table-layout: fixed !important;
+    border-collapse: collapse !important;
+    border: 1.5px solid #0f172a !important;
+    font-size: 8.5pt !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  .timetable-table thead {
+    display: table-header-group !important;
+  }
+
+  .timetable-table th {
+    background-color: #0f172a !important;
+    color: #ffffff !important;
+    border: 1px solid #334155 !important;
+    padding: 4px 6px !important;
+    font-size: 8pt !important;
+    font-weight: 700 !important;
+    text-align: center !important;
+  }
+
+  .timetable-table td {
+    border: 1px solid #cbd5e1 !important;
+    padding: 2.5px 3.5px !important;
+    vertical-align: top !important;
+    background-color: #ffffff !important;
+  }
+
+  .timetable-table tr {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  /* Period time column */
+  .period-time-col {
+    background-color: #f8fafc !important;
+    border-right: 2px solid #0f172a !important;
+    width: 85px !important;
+  }
+
+  /* Subject slot card */
+  .slot-card {
+    min-height: 44px !important;
+    padding: 3px 5px !important;
+    border-radius: 4px !important;
+    border: 1px solid #e2e8f0 !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  /* Subject Color theme classes in print */
+  .cc0 { background-color: #eef2ff !important; border-left: 3.5px solid #4f46e5 !important; }
+  .cc1 { background-color: #fdf2f8 !important; border-left: 3.5px solid #db2777 !important; }
+  .cc2 { background-color: #ecfdf5 !important; border-left: 3.5px solid #059669 !important; }
+  .cc3 { background-color: #fffbeb !important; border-left: 3.5px solid #d97706 !important; }
+  .cc4 { background-color: #f5f3ff !important; border-left: 3.5px solid #7c3aed !important; }
+  .cc5 { background-color: #fef2f2 !important; border-left: 3.5px solid #e11d48 !important; }
+  .cc6 { background-color: #f0fdfa !important; border-left: 3.5px solid #0d9488 !important; }
+  .cc7 { background-color: #f0f9ff !important; border-left: 3.5px solid #0284c7 !important; }
+  .cc8 { background-color: #fff7ed !important; border-left: 3.5px solid #ea580c !important; }
+
+  /* Recess & Break rows in print */
+  .recess-row {
+    background-color: #fffbeb !important;
+    border-top: 1px dashed #d97706 !important;
+    border-bottom: 1px dashed #d97706 !important;
+    color: #92400e !important;
+    font-weight: 700 !important;
+    padding: 3px 6px !important;
+    font-size: 7.5pt !important;
+  }
+
+  /* Mass Drill rows in print */
+  .massdrill-row {
+    background-color: #ecfdf5 !important;
+    border-top: 1px solid #059669 !important;
+    border-bottom: 1px solid #059669 !important;
+    color: #065f46 !important;
+    font-weight: 700 !important;
+    padding: 3px 6px !important;
+    font-size: 7.5pt !important;
+  }
+
+  /* Print header banner */
+  .print-banner {
+    display: block !important;
+    margin-bottom: 6px !important;
+    padding-bottom: 6px !important;
+    border-bottom: 2px solid #0f172a !important;
+  }
+
+  /* Print footer / legend */
+  .print-legend {
+    display: block !important;
+    margin-top: 6px !important;
+    padding-top: 4px !important;
+    border-top: 1px solid #cbd5e1 !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+}
+
+

@@ -1,0 +1,132 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile and administrative credentials stored per user account in Firestore",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique user profile ID", "maxLength": 128 },
+        "uid": { "type": "string", "description": "Firebase Auth UID", "maxLength": 128 },
+        "username": { "type": "string", "description": "Unique username or handle for the user", "maxLength": 60 },
+        "name": { "type": "string", "description": "Full name or display name of the user", "maxLength": 120 },
+        "email": { "type": "string", "description": "Account email address", "maxLength": 128 },
+        "role": { "type": "string", "enum": ["Superuser", "Principal", "Academic Dean", "HOD", "Teacher", "Administrator"], "description": "Administrative role" },
+        "institutionName": { "type": "string", "description": "School or educational institution name", "maxLength": 150 },
+        "schoolId": { "type": "string", "description": "Linked school document ID", "maxLength": 128 },
+        "isBlocked": { "type": "boolean", "description": "Whether the user access is blocked by superuser" },
+        "avatarUrl": { "type": "string", "description": "Profile picture URL or uploaded image data", "maxLength": 500000 },
+        "phoneNumber": { "type": "string", "description": "Contact telephone number", "maxLength": 40 },
+        "department": { "type": "string", "description": "Department or faculty division", "maxLength": 120 },
+        "officeHours": { "type": "string", "description": "Office availability hours", "maxLength": 120 },
+        "qualifications": { "type": "string", "description": "Academic qualifications", "maxLength": 200 },
+        "bio": { "type": "string", "description": "Biography or administrative notes", "maxLength": 500 },
+        "academicYear": { "type": "string", "description": "Current academic school year", "maxLength": 32 },
+        "themePreference": { "type": "string", "enum": ["system", "light", "dark"] },
+        "createdAt": { "type": "string", "description": "Account registration timestamp", "maxLength": 64 },
+        "updatedAt": { "type": "string", "description": "Last profile update timestamp", "maxLength": 64 },
+        "lastLoginAt": { "type": "string", "description": "Last login timestamp", "maxLength": 64 },
+        "savedTimetablesCount": { "type": "number", "description": "Number of timetables created or saved" }
+      },
+      "required": ["id", "uid", "username", "name", "email", "role", "institutionName"]
+    },
+    "School": {
+      "title": "School",
+      "description": "School institution managed by Superuser with one designated School Admin",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique school document ID", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "name": { "type": "string", "description": "School name", "minLength": 2, "maxLength": 120 },
+        "code": { "type": "string", "description": "Optional school code", "maxLength": 32 },
+        "city": { "type": "string", "description": "School city or location", "maxLength": 80 },
+        "academicYear": { "type": "string", "description": "Academic year", "maxLength": 32 },
+        "adminEmail": { "type": "string", "description": "Designated school admin email", "minLength": 5, "maxLength": 128 },
+        "adminName": { "type": "string", "description": "Designated school admin full name", "minLength": 2, "maxLength": 100 },
+        "adminRole": { "type": "string", "enum": ["Principal", "Administrator"], "description": "Designated admin role" },
+        "adminStatus": { "type": "string", "enum": ["active", "blocked"], "description": "Admin access status" },
+        "blockedReason": { "type": "string", "description": "Reason for blocking admin", "maxLength": 300 },
+        "blockedAt": { "type": "string", "description": "ISO timestamp when blocked", "maxLength": 64 },
+        "createdBy": { "type": "string", "description": "Superuser UID who created record", "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server creation timestamp" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server update timestamp" }
+      },
+      "required": ["id", "name", "adminEmail", "adminName", "adminStatus", "createdBy", "createdAt", "updatedAt"]
+    },
+    "SchoolAdmin": {
+      "title": "SchoolAdmin",
+      "description": "Per-school administrator access registry controlled by Superuser",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "description": "Normalized lowercase admin email (matches doc ID)", "minLength": 5, "maxLength": 128 },
+        "name": { "type": "string", "description": "Administrator full name", "minLength": 2, "maxLength": 100 },
+        "schoolId": { "type": "string", "description": "Assigned school ID", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "schoolName": { "type": "string", "description": "Assigned school name", "minLength": 2, "maxLength": 120 },
+        "role": { "type": "string", "enum": ["Principal", "Administrator"], "description": "Admin role for the school" },
+        "status": { "type": "string", "enum": ["active", "blocked"], "description": "Access status controlled by Superuser" },
+        "blockedReason": { "type": "string", "description": "Reason when blocked", "maxLength": 300 },
+        "blockedAt": { "type": "string", "description": "ISO timestamp when blocked", "maxLength": 64 },
+        "blockedBy": { "type": "string", "description": "Superuser email or UID who blocked", "maxLength": 128 },
+        "createdBy": { "type": "string", "description": "Superuser UID", "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server creation timestamp" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server update timestamp" }
+      },
+      "required": ["email", "name", "schoolId", "schoolName", "role", "status", "createdBy", "createdAt", "updatedAt"]
+    },
+    "SavedTimetable": {
+      "title": "SavedTimetable",
+      "description": "Saved school timetable structure containing faculty, classes, periods, and schedules",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique identifier of saved timetable", "maxLength": 128 },
+        "name": { "type": "string", "description": "Name or title of saved timetable", "maxLength": 160 },
+        "userId": { "type": "string", "description": "Creator user UID", "maxLength": 128 },
+        "savedAt": { "type": "string", "description": "ISO timestamp when saved", "maxLength": 64 },
+        "updatedAt": { "type": "string", "description": "ISO timestamp of last update", "maxLength": 64 },
+        "state": { "type": "object", "description": "Timetable full state with teachers, classes, and schedule" },
+        "settings": { "type": "object", "description": "Settings like number of periods and start time" },
+        "notes": { "type": "string", "description": "Optional notes or remarks", "maxLength": 500 }
+      },
+      "required": ["id", "name", "userId", "savedAt", "state", "settings"]
+    },
+    "AutoSaveDraft": {
+      "title": "AutoSaveDraft",
+      "description": "Periodic auto-saved snapshot of the active timetable state stored in Firestore per user",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Auto-save identifier (e.g. latest)", "maxLength": 64 },
+        "userId": { "type": "string", "description": "Owner user UID", "maxLength": 128 },
+        "savedAt": { "type": "string", "description": "ISO timestamp of auto-save snapshot", "maxLength": 64 },
+        "source": { "type": "string", "description": "Source storage identifier", "maxLength": 32 },
+        "state": { "type": "object", "description": "Active timetable state payload" },
+        "settings": { "type": "object", "description": "Active timetable generator settings" },
+        "summary": { "type": "object", "description": "Summary metadata of classes and faculty" }
+      },
+      "required": ["id", "userId", "savedAt", "state", "settings"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "User profile collection indexed by Firebase Auth user UID"
+    },
+    "/users/{userId}/autosave/{docId}": {
+      "schema": "AutoSaveDraft",
+      "description": "Auto-saved timetable state documents per user"
+    },
+    "/users/{userId}/timetables/{docId}": {
+      "schema": "SavedTimetable",
+      "description": "User specific saved timetable collections"
+    },
+    "/saved_timetables/{timetableId}": {
+      "schema": "SavedTimetable",
+      "description": "User-scoped saved timetable backups"
+    },
+    "/schools/{schoolId}": {
+      "schema": "School",
+      "description": "Registered schools and their designated single school administrator"
+    },
+    "/school_admins/{adminEmail}": {
+      "schema": "SchoolAdmin",
+      "description": "School admin access registry keyed by normalized lowercase email for O(1) authorization and instant block enforcement"
+    }
+  }
+}
